@@ -24,6 +24,7 @@
 		},
 		"静音": {
 			"alarm_on": false,
+			"sfx_on": false,
 			"auto_pause_on_alert": false
 		},
 		"ログ多め": {

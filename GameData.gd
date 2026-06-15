@@ -22,6 +22,7 @@ var active_preset_name: String = "標準"
 const DEFAULT_PRESET: Dictionary = {
 	"low_hp_threshold": 0.3,
 	"alarm_on": true,
+	"sfx_on": true,
 	"auto_pause_on_alert": false,
 	"max_log_lines": 12,
 	"log_save_enabled": false,

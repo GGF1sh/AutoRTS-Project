@@ -171,7 +171,7 @@ func _act_retreat(delta: float) -> void:
 	_set_action("後退")
 	var dir: Vector2 = (global_position - e.global_position).normalized()
 	global_position += dir * move_speed * delta
-	_clamp_to_screen()
+	_clamp_to_battlefield()
 
 
 func _act_heal(threshold: float, delta: float) -> void:
@@ -184,6 +184,9 @@ func _act_heal(threshold: float, delta: float) -> void:
 		_set_action("回復")
 		if _cooldown_timer <= 0.0:
 			_cooldown_timer = attack_cooldown
+			if battle:
+				battle.add_heal_fx(ally.global_position, base_color)
+				battle.play_heal_sfx()
 			ally.receive_heal(heal_power, self)
 	else:
 		_set_action("接近(回復)")
@@ -201,11 +204,18 @@ func _ally_group() -> String:
 	return "ally" if team == Team.ALLY else "enemy"
 
 
+# 生存ユニットの取得（Main 側のキャッシュを使う。無ければグループ直引き）
+func _units_in(group_name: String) -> Array:
+	if battle and battle.has_method("get_alive_units"):
+		return battle.get_alive_units(group_name)
+	return get_tree().get_nodes_in_group(group_name)
+
+
 # 最も近い「生きている敵」
 func _find_nearest_enemy() -> Unit:
 	var nearest: Unit = null
 	var best: float = INF
-	for u in get_tree().get_nodes_in_group(_enemy_group()):
+	for u in _units_in(_enemy_group()):
 		if not u.is_alive():
 			continue
 		var d: float = global_position.distance_to(u.global_position)
@@ -219,7 +229,7 @@ func _find_nearest_enemy() -> Unit:
 func _find_weakest_enemy() -> Unit:
 	var weakest: Unit = null
 	var lowest: int = 999999
-	for u in get_tree().get_nodes_in_group(_enemy_group()):
+	for u in _units_in(_enemy_group()):
 		if not u.is_alive():
 			continue
 		if u.hp < lowest:
@@ -232,7 +242,7 @@ func _find_weakest_enemy() -> Unit:
 func _find_wounded_ally(threshold: float) -> Unit:
 	var target: Unit = null
 	var lowest_ratio: float = threshold
-	for u in get_tree().get_nodes_in_group(_ally_group()):
+	for u in _units_in(_ally_group()):
 		if u == self or not u.is_alive():
 			continue
 		var ratio: float = float(u.hp) / float(u.max_hp)
@@ -255,6 +265,9 @@ func _try_attack(target: Unit) -> void:
 		return
 	_cooldown_timer = attack_cooldown
 	var damage: int = max(1, attack_power - target.defense)
+	if battle:
+		battle.add_attack_fx(global_position, target.global_position, base_color)
+		battle.play_attack_sfx()
 	target.take_damage(damage, self)
 
 
@@ -307,13 +320,14 @@ func _die() -> void:
 	queue_redraw()
 
 
-# 画面外に逃げすぎないよう位置を制限する（後退用）
-func _clamp_to_screen() -> void:
-	var view: Vector2 = get_viewport_rect().size
-	var m: float = radius + 4.0
-	global_position.x = clamp(global_position.x, m, view.x - m)
-	# 画面下のログ欄(約170px)に重ならないようにする
-	global_position.y = clamp(global_position.y, m, view.y - 180.0)
+# 戦場の枠内に位置を制限する（後退用）
+func _clamp_to_battlefield() -> void:
+	if battle == null:
+		return
+	var r: Rect2 = battle.battle_rect
+	var m: float = radius + 2.0
+	global_position.x = clamp(global_position.x, r.position.x + m, r.position.x + r.size.x - m)
+	global_position.y = clamp(global_position.y, r.position.y + m, r.position.y + r.size.y - m)
 
 
 # 行動が変わった時だけ、目立つ判断をログに出す

@@ -33,6 +33,11 @@
 		{ "cond": "enemy_in_range", "action": "attack_nearest" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],
+	"Scout": [
+		{ "cond": "self_hp_below", "param": 0.25, "action": "retreat" },
+		{ "cond": "enemy_in_range", "action": "attack_weakest" },
+		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
+	],
 	"Brute": [
 		{ "cond": "enemy_in_range", "action": "attack_nearest" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
