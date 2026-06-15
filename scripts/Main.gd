@@ -27,6 +27,8 @@ var log_save_dir: String = "user://logs"
 
 var _battle_over: bool = false
 var _alive_by_group: Dictionary = { "ally": [], "enemy": [] }
+# チームの集中攻撃ターゲット（team(int) -> Unit）。focus_fire が参照する。
+var _focus_target: Dictionary = {}
 
 var _units_node: Node2D
 var _hud: Hud
@@ -53,12 +55,15 @@ func _ready() -> void:
 
 	_rebuild_alive_cache()
 	queue_redraw()
-	log_message("戦闘開始！ スペースキーで一時停止 / 再開", "system", "system")
+	log_message("戦闘開始！ Space=一時停止/再開  R=再戦", "system", "system")
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_SPACE:
-		_toggle_pause()
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_SPACE:
+			_toggle_pause()
+		elif event.keycode == KEY_R:
+			get_tree().reload_current_scene()  # 再戦（観察用に即リセット）
 
 
 func _toggle_pause() -> void:
@@ -104,7 +109,7 @@ func _count_alive(group_name: String) -> int:
 
 func _end_battle(text: String) -> void:
 	_battle_over = true
-	_hud.show_result(text)
+	_hud.show_result("%s\n（R キーで再戦）" % text)
 	log_message("=== %s ===" % text, "system", "system")
 	if log_save_enabled:
 		save_log_now()
@@ -145,6 +150,20 @@ func add_attack_fx(from: Vector2, to: Vector2, color: Color, kind: String = "bea
 func add_heal_fx(pos: Vector2, _color: Color = Color.GREEN) -> void:
 	if _fx:
 		_fx.add_heal(pos)
+
+
+# チーム連携：攻撃が起きたら、その陣営の「集中ターゲット」を更新する。
+func report_attack(attacker_team: int, target: Unit) -> void:
+	if target != null and target.is_alive():
+		_focus_target[attacker_team] = target
+
+
+# 自陣営の集中ターゲット（生存していれば返す。focus_fire 用）
+func get_focus_target(my_team: int) -> Unit:
+	var t: Unit = _focus_target.get(my_team, null)
+	if t != null and t.is_alive():
+		return t
+	return null
 
 
 # ============================================================

@@ -5,8 +5,8 @@
 		"enemy_in_range", "enemy_too_close(param=距離)", "nearest_enemy_exists"
 	],
 	"_actions": [
-		"attack_nearest", "attack_weakest", "move_to_nearest_enemy",
-		"heal_lowest_hp_ally", "heal_self",
+		"attack_nearest", "attack_weakest", "focus_fire(味方の集中ターゲットを狙う)",
+		"move_to_nearest_enemy", "heal_lowest_hp_ally", "heal_self",
 		"retreat(際限なし)", "retreat_to_safe(factor=倍率)", "flee_to_healer(factor=倍率)"
 	],
 	"Frontline": [
@@ -16,7 +16,7 @@
 	"Shooter": [
 		{ "cond": "self_hp_below", "param": 0.3, "action": "flee_to_healer", "factor": 1.3 },
 		{ "cond": "enemy_too_close", "param": 130.0, "action": "retreat_to_safe", "factor": 1.2 },
-		{ "cond": "enemy_in_range", "action": "attack_nearest" },
+		{ "cond": "enemy_in_range", "action": "focus_fire" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],
 	"Medic": [
@@ -28,7 +28,7 @@
 	],
 	"Support": [
 		{ "cond": "self_hp_below", "param": 0.3, "action": "flee_to_healer", "factor": 1.3 },
-		{ "cond": "enemy_in_range", "action": "attack_weakest" },
+		{ "cond": "enemy_in_range", "action": "focus_fire" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],
 	"Raider": [

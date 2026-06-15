@@ -133,6 +133,8 @@ func _run_action(rule: Dictionary, delta: float) -> void:
 			_act_attack(_find_nearest_enemy(), delta)
 		"attack_weakest":
 			_act_attack(_find_weakest_enemy(), delta)
+		"focus_fire":
+			_act_attack(_focus_or_nearest(), delta)
 		"retreat":
 			_act_retreat(delta)
 		"retreat_to_safe":
@@ -163,6 +165,15 @@ func _act_attack(target: Unit, delta: float) -> void:
 	else:
 		_set_action("接近")
 		_move_toward(target, delta)
+
+
+# チームの集中ターゲットを優先（無ければ最寄り敵）。味方で同じ敵を集中攻撃。
+func _focus_or_nearest() -> Unit:
+	if battle and battle.has_method("get_focus_target"):
+		var f: Unit = battle.get_focus_target(team)
+		if f != null:
+			return f
+	return _find_nearest_enemy()
 
 
 func _act_move_to(target: Unit, delta: float) -> void:
@@ -351,6 +362,7 @@ func _try_attack(target: Unit) -> void:
 		var kind: String = "slash" if attack_range <= 90.0 else "beam"
 		battle.add_attack_fx(global_position, target.global_position, base_color, kind)
 		battle.play_attack_sfx()
+		battle.report_attack(team, target)  # チームの集中ターゲットを更新
 	target.take_damage(damage, self)
 
 
@@ -445,11 +457,11 @@ func _set_action(label: String) -> void:
 # ============================================================
 func _default_gambits(r: String) -> Array:
 	match r:
-		"Shooter":  # 近づかれたらカイト。瀕死なら衛生兵へ
+		"Shooter":  # 近づかれたらカイト。瀕死なら衛生兵へ。射程内は味方と集中攻撃
 			return [
 				{ "cond": "self_hp_below", "param": 0.3, "action": "flee_to_healer", "factor": 1.3 },
 				{ "cond": "enemy_too_close", "param": 130.0, "action": "retreat_to_safe", "factor": 1.2 },
-				{ "cond": "enemy_in_range", "action": "attack_nearest" },
+				{ "cond": "enemy_in_range", "action": "focus_fire" },
 				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
 			]
 		"Medic":  # 危険なら安全圏へ→自己回復→味方回復→復帰
@@ -460,10 +472,10 @@ func _default_gambits(r: String) -> Array:
 				{ "cond": "enemy_in_range", "action": "attack_nearest" },
 				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
 			]
-		"Support":  # 弱った敵を集中攻撃。瀕死なら衛生兵へ
+		"Support":  # 味方が狙う敵を集中攻撃（援護）。瀕死なら衛生兵へ
 			return [
 				{ "cond": "self_hp_below", "param": 0.3, "action": "flee_to_healer" },
-				{ "cond": "enemy_in_range", "action": "attack_weakest" },
+				{ "cond": "enemy_in_range", "action": "focus_fire" },
 				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
 			]
 		"Scout":  # 高速・弱点狙い。瀕死なら安全圏へ

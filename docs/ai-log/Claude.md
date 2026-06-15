@@ -22,6 +22,7 @@
 | 2026-06-15 | v0.9.1 | **後退挙動の修正＋エフェクト改善**（ユーザー実機フィードバック）。際限のない後退を retreat_to_safe / flee_to_healer / heal_self で解消、戦線復帰、盾役はHP0まで。近接=斜めスラッシュ、回復=波線エフェクト。rule の条件param と後退factor をキー分離。ZoC/地形は DESIGN_QUESTIONS Q4 に記録。 | 実装完了。実機確認待ち。 |
 | 2026-06-15 | v0.9.2 | **Main.gd 分割リファクタ**（ユーザー指摘：肥大化＝トークン浪費）。Hud.gd（UI＋ログ）/ Fx.gd（エフェクト）/ AudioBank.gd（音）へ分離。フォールバックのユニット生データを Main→GameData へ移動。Main は司令塔のみ。Unit の `battle.*` インターフェースは不変＝挙動不変。 | 実装完了。実機確認待ち。 |
 | 2026-06-15 | v0.9.3 | **行動ナレーションlogの連投修正**（ユーザー報告：1戦闘でログ17KB）。毎フレームの状態フリップ（後退↔接近↔回復）で narration が溢れていた。Unit に `_narration_cd`（3秒）を入れ間引き。「待機(警戒)」のlogは廃止。ダメージ/回復/撃破/警告の実イベントは据え置き。 | 実装完了。実機確認待ち。 |
+| 2026-06-15 | v0.9.4 | **focus_fire＋再戦＋フォルダ整理**（3AIレビュー反映＋ユーザー要望）。Main に集中ターゲット（report_attack/get_focus_target）、Unit に focus_fire 行動（Shooter/Support が味方の狙う敵を集中）。R=reload_current_scene で再戦。scripts//scenes/ へ整理、node_2d.tscn削除、パス参照更新。docs/NEXT_TASKS.md に引き継ぎ集約。 | 実装完了。実機確認待ち。ここで新チャットへ切替予定。 |
 
 ## 実装スタンス（合意済み）
 
