@@ -36,7 +36,13 @@ var gambits: Array = []
 var _cooldown_timer: float = 0.0  # 0 以下なら攻撃／回復可能
 var _dead: bool = false
 var _last_action: String = ""     # 直前の行動ラベル（ログの重複防止）
+var _low_hp_warned: bool = false  # HP低下アラートを既に出したか
 var battle: Node = null           # Main への参照（ログ出力・一時停止判定に使う）
+
+
+# 陣営名（ログのフィルタ用）
+func team_name() -> String:
+	return "ally" if team == Team.ALLY else "enemy"
 
 
 # 辞書からステータスを設定する。Main 側から呼ぶ。
@@ -247,10 +253,13 @@ func take_damage(amount: int, source: Unit) -> void:
 		return
 	hp -= amount
 	if battle:
-		battle.log_message("%s が %s に %d ダメージ" % [source.unit_name, unit_name, amount])
+		battle.log_message("%s が %s に %d ダメージ" % [source.unit_name, unit_name, amount],
+			"attack", source.team_name())
 	if hp <= 0:
 		hp = 0
 		_die()
+	else:
+		_check_low_hp()
 	queue_redraw()
 
 
@@ -260,8 +269,23 @@ func receive_heal(amount: int, source: Unit) -> void:
 	var before: int = hp
 	hp = min(max_hp, hp + amount)
 	if battle and hp > before:
-		battle.log_message("✚ %s が %s を %d 回復" % [source.unit_name, unit_name, hp - before])
+		battle.log_message("✚ %s が %s を %d 回復" % [source.unit_name, unit_name, hp - before],
+			"heal", source.team_name())
+	_check_low_hp()  # 回復でしきい値を上回ったら警告フラグを戻す
 	queue_redraw()
+
+
+# HPがしきい値を下回った瞬間だけ Main にアラートを通知する
+func _check_low_hp() -> void:
+	if battle == null:
+		return
+	var ratio: float = float(hp) / float(max_hp)
+	if ratio < battle.low_hp_threshold:
+		if not _low_hp_warned:
+			_low_hp_warned = true
+			battle.on_low_hp(self)
+	else:
+		_low_hp_warned = false
 
 
 func _die() -> void:
@@ -269,7 +293,7 @@ func _die() -> void:
 	remove_from_group("ally")
 	remove_from_group("enemy")
 	if battle:
-		battle.log_message("☠ %s は倒れた" % unit_name)
+		battle.log_message("☠ %s は倒れた" % unit_name, "death", team_name())
 	queue_redraw()
 
 
@@ -291,9 +315,11 @@ func _set_action(label: String) -> void:
 		return
 	match label:
 		"後退":
-			battle.log_message("← %s は危険を察知して後退する" % unit_name)
+			battle.log_message("← %s は危険を察知して後退する" % unit_name,
+				"retreat", team_name())
 		"回復", "接近(回復)":
-			battle.log_message("%s は負傷した味方を助けに向かう" % unit_name)
+			battle.log_message("%s は負傷した味方を助けに向かう" % unit_name,
+				"heal", team_name())
 
 
 # ============================================================
