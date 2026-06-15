@@ -11,13 +11,13 @@ config_version=5
 [application]
 
 config/name="gunbitrts"
-run/main_scene="res://Main.tscn"
+run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
-GameData="*res://GameData.gd"
+GameData="*res://scripts/GameData.gd"
 
 [display]
 
