@@ -48,21 +48,31 @@ func team_name() -> String:
 # 辞書からステータスを設定する。Main 側から呼ぶ。
 func setup(data: Dictionary) -> void:
 	unit_name = data.get("name", unit_name)
-	team = data.get("team", team)
+	team = int(data.get("team", team))
 	role = data.get("role", role)
-	max_hp = data.get("max_hp", max_hp)
+	max_hp = int(data.get("max_hp", max_hp))
 	hp = max_hp
-	attack_power = data.get("attack", attack_power)
-	defense = data.get("defense", defense)
-	heal_power = data.get("heal_power", heal_power)
-	move_speed = data.get("move_speed", move_speed)
-	attack_range = data.get("attack_range", attack_range)
-	attack_cooldown = data.get("attack_cooldown", attack_cooldown)
-	radius = data.get("radius", radius)
-	base_color = data.get("color", base_color)
+	attack_power = int(data.get("attack", attack_power))
+	defense = int(data.get("defense", defense))
+	heal_power = int(data.get("heal_power", heal_power))
+	move_speed = float(data.get("move_speed", move_speed))
+	attack_range = float(data.get("attack_range", attack_range))
+	attack_cooldown = float(data.get("attack_cooldown", attack_cooldown))
+	radius = float(data.get("radius", radius))
+
+	# 色は Color でも "#RRGGBB" 文字列でも受け付ける
+	var col: Variant = data.get("color", base_color)
+	if col is String:
+		base_color = Color.html(col)
+	elif col is Color:
+		base_color = col
 
 	# ガンビットは明示指定があればそれを、なければロール既定を使う
-	gambits = data.get("gambits", _default_gambits(role))
+	var g: Variant = data.get("gambits", [])
+	if g is Array and not g.is_empty():
+		gambits = g
+	else:
+		gambits = _default_gambits(role)
 
 	add_to_group("units")
 	add_to_group("ally" if team == Team.ALLY else "enemy")

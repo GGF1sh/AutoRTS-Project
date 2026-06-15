@@ -1,0 +1,49 @@
+{
+	"_comment": "敵味方ユニットのテンプレート。ここを編集すればコードを触らずキャラを増減・調整できます。color は #RRGGBB。role は gambits.json のキーに対応（無ければ Unit.gd の既定にフォールバック）。",
+	"allies": [
+		{
+			"name": "タロウ(前衛)", "role": "Frontline",
+			"max_hp": 160, "attack": 14, "defense": 0, "heal_power": 0,
+			"move_speed": 70.0, "attack_range": 48.0, "attack_cooldown": 0.9,
+			"radius": 18.0, "color": "#4d8cff"
+		},
+		{
+			"name": "レン(射撃)", "role": "Shooter",
+			"max_hp": 90, "attack": 18, "defense": 0, "heal_power": 0,
+			"move_speed": 65.0, "attack_range": 230.0, "attack_cooldown": 1.1,
+			"radius": 15.0, "color": "#4dd9e6"
+		},
+		{
+			"name": "ミナ(衛生)", "role": "Medic",
+			"max_hp": 110, "attack": 8, "defense": 0, "heal_power": 16,
+			"move_speed": 75.0, "attack_range": 90.0, "attack_cooldown": 1.3,
+			"radius": 15.0, "color": "#4de680"
+		},
+		{
+			"name": "アキラ(支援)", "role": "Support",
+			"max_hp": 110, "attack": 12, "defense": 0, "heal_power": 0,
+			"move_speed": 70.0, "attack_range": 150.0, "attack_cooldown": 1.0,
+			"radius": 15.0, "color": "#f2d94d"
+		}
+	],
+	"enemies": [
+		{
+			"name": "Raider", "role": "Raider",
+			"max_hp": 120, "attack": 12, "defense": 0, "heal_power": 0,
+			"move_speed": 70.0, "attack_range": 48.0, "attack_cooldown": 1.0,
+			"radius": 16.0, "color": "#e65a4d"
+		},
+		{
+			"name": "EnemyShooter", "role": "Shooter",
+			"max_hp": 80, "attack": 16, "defense": 0, "heal_power": 0,
+			"move_speed": 60.0, "attack_range": 210.0, "attack_cooldown": 1.2,
+			"radius": 15.0, "color": "#e6804d"
+		},
+		{
+			"name": "Brute", "role": "Brute",
+			"max_hp": 220, "attack": 20, "defense": 2, "heal_power": 0,
+			"move_speed": 40.0, "attack_range": 50.0, "attack_cooldown": 1.6,
+			"radius": 22.0, "color": "#b34059"
+		}
+	]
+}

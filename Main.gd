@@ -3,34 +3,30 @@ extends Node2D
 # ============================================================
 # Main.gd
 # 戦闘全体の管理役。
-#   - 味方4体・敵3体を生成して配置する
+#   - data/units.json から味方・敵を生成（無ければコード既定）
+#   - data/config.json のプリセットで設定を適用（ゲーム内で切替・保存）
 #   - スペースキーで一時停止 / 再開（独自フラグ方式）
-#   - 戦闘ログ（色分け・フィルタ付き）を表示する
+#   - 戦闘ログ（色分け・フィルタ・保存）
 #   - HP低下アラート（警告表示・ビープ音・自動一時停止）
-#   - 全滅したら勝敗を表示する
+#   - 全滅で勝敗表示
 # ============================================================
 
 # 一時停止フラグ。各 Unit はこれを見て動きを止める。
 var is_paused: bool = false
 
-# --- HP低下アラート設定 ---
-var low_hp_threshold: float = 0.3   # この割合を下回ると警告
-var alarm_on: bool = true           # ビープ音を鳴らすか
-var auto_pause_on_alert: bool = false  # 警告時に自動で一時停止するか
+# --- 設定（プリセットから適用される） ---
+var low_hp_threshold: float = 0.3
+var alarm_on: bool = true
+var auto_pause_on_alert: bool = false
+var max_log_lines: int = 12
 
-# ------------------------------------------------------------
-# ★ログの色設定★ ここを書き換えれば色を自由に変えられます
-# ------------------------------------------------------------
+# ログの色（プリセットから読み込む。category 名 -> Color）
 var LOG_COLORS: Dictionary = {
-	"attack":  Color(0.85, 0.85, 0.85),  # 攻撃 = 薄いグレー
-	"heal":    Color(0.40, 0.95, 0.55),  # 回復 = 緑
-	"retreat": Color(0.95, 0.85, 0.35),  # 後退 = 黄
-	"death":   Color(0.95, 0.45, 0.45),  # 撃破 = 赤
-	"warn":    Color(1.00, 0.55, 0.15),  # 警告 = オレンジ
-	"system":  Color(0.55, 0.80, 1.00),  # システム = 水色
+	"attack": Color(0.85, 0.85, 0.85), "heal": Color(0.40, 0.95, 0.55),
+	"retreat": Color(0.95, 0.85, 0.35), "death": Color(0.95, 0.45, 0.45),
+	"warn": Color(1.00, 0.55, 0.15), "system": Color(0.55, 0.80, 1.00),
 }
 
-const MAX_LOG_LINES: int = 12
 const MAX_LOG_HISTORY: int = 300
 
 # ログ1件 = { "text": String, "category": String, "faction": String }
@@ -41,7 +37,7 @@ var _show_faction: Dictionary = { "ally": true, "enemy": true, "system": true }
 var _show_category: Dictionary = {
 	"attack": true, "heal": true, "retreat": true, "death": true, "system": true,
 }
-var _filter_target: String = ""  # 空 = 全員
+var _filter_target: String = ""
 
 var _battle_over: bool = false
 
@@ -52,6 +48,10 @@ var _pause_label: Label
 var _alert_label: Label
 var _result_label: Label
 var _target_option: OptionButton
+var _preset_option: OptionButton
+var _preset_name_edit: LineEdit
+var _chk_alarm: CheckBox
+var _chk_autopause: CheckBox
 
 # 音
 var _beep_player: AudioStreamPlayer
@@ -61,11 +61,11 @@ func _ready() -> void:
 	add_to_group("main")
 	_setup_audio()
 	_build_ui()
+	_apply_preset(GameData.active_preset_name)
 	_spawn_units()
 	log_message("戦闘開始！ スペースキーで一時停止 / 再開", "system", "system")
 
 
-# スペースキーで一時停止トグル
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_SPACE:
@@ -102,10 +102,96 @@ func _end_battle(text: String) -> void:
 	_result_label.text = text
 	_result_label.visible = true
 	log_message("=== %s ===" % text, "system", "system")
+	_save_log()  # 戦闘終了時に自動保存
 
 
 # ============================================================
-# HP低下アラート（Unit.take_damage から呼ばれる）
+# プリセット
+# ============================================================
+func _apply_preset(preset_name: String) -> void:
+	if not GameData.presets.has(preset_name):
+		return
+	GameData.active_preset_name = preset_name
+	var p: Dictionary = GameData.get_preset(preset_name)
+
+	low_hp_threshold = float(p.get("low_hp_threshold", 0.3))
+	alarm_on = bool(p.get("alarm_on", true))
+	auto_pause_on_alert = bool(p.get("auto_pause_on_alert", false))
+	max_log_lines = int(p.get("max_log_lines", 12))
+
+	var colors: Dictionary = p.get("log_colors", {})
+	for key in colors.keys():
+		if colors[key] is String:
+			LOG_COLORS[key] = Color.html(colors[key])
+
+	# UIに反映（シグナルを出さずに状態だけ合わせる）
+	if _chk_alarm:
+		_chk_alarm.set_pressed_no_signal(alarm_on)
+	if _chk_autopause:
+		_chk_autopause.set_pressed_no_signal(auto_pause_on_alert)
+
+	_refresh_log()
+	log_message("プリセット「%s」を適用" % preset_name, "system", "system")
+
+
+func _on_preset_selected(index: int) -> void:
+	_apply_preset(_preset_option.get_item_text(index))
+
+
+# 1ボタンで次のプリセットへ巡回
+func _cycle_preset() -> void:
+	var names: Array = GameData.get_preset_names()
+	if names.is_empty():
+		return
+	var i: int = names.find(GameData.active_preset_name)
+	var next_name: String = names[(i + 1) % names.size()]
+	_select_preset_in_dropdown(next_name)
+	_apply_preset(next_name)
+
+
+func _save_current_as_preset() -> void:
+	var preset_name: String = _preset_name_edit.text.strip_edges()
+	if preset_name == "":
+		preset_name = "カスタム"
+	var preset: Dictionary = {
+		"low_hp_threshold": low_hp_threshold,
+		"alarm_on": alarm_on,
+		"auto_pause_on_alert": auto_pause_on_alert,
+		"max_log_lines": max_log_lines,
+		"log_colors": _colors_to_hex(),
+	}
+	if GameData.save_user_preset(preset_name, preset):
+		_repopulate_preset_dropdown(preset_name)
+		log_message("プリセット「%s」を保存しました" % preset_name, "system", "system")
+	else:
+		log_message("プリセットの保存に失敗しました", "warn", "system")
+
+
+func _colors_to_hex() -> Dictionary:
+	var out: Dictionary = {}
+	for key in LOG_COLORS.keys():
+		out[key] = "#" + LOG_COLORS[key].to_html(false)
+	return out
+
+
+func _repopulate_preset_dropdown(select_name: String) -> void:
+	if _preset_option == null:
+		return
+	_preset_option.clear()
+	for n in GameData.get_preset_names():
+		_preset_option.add_item(n)
+	_select_preset_in_dropdown(select_name)
+
+
+func _select_preset_in_dropdown(target_name: String) -> void:
+	for i in _preset_option.item_count:
+		if _preset_option.get_item_text(i) == target_name:
+			_preset_option.select(i)
+			return
+
+
+# ============================================================
+# HP低下アラート
 # ============================================================
 func on_low_hp(unit: Unit) -> void:
 	var pct: int = int(round(low_hp_threshold * 100.0))
@@ -134,8 +220,6 @@ func _play_beep() -> void:
 # ============================================================
 # 戦闘ログ
 # ============================================================
-# category: attack / heal / retreat / death / warn / system
-# faction : ally / enemy / system
 func log_message(text: String, category: String = "system", faction: String = "system") -> void:
 	_log_entries.append({ "text": text, "category": category, "faction": faction })
 	if _log_entries.size() > MAX_LOG_HISTORY:
@@ -152,19 +236,16 @@ func _refresh_log() -> void:
 			continue
 		var col: Color = LOG_COLORS.get(e["category"], Color.WHITE)
 		lines.append("[color=#%s]%s[/color]" % [col.to_html(false), e["text"]])
-	if lines.size() > MAX_LOG_LINES:
-		lines = lines.slice(lines.size() - MAX_LOG_LINES)
+	if lines.size() > max_log_lines:
+		lines = lines.slice(lines.size() - max_log_lines)
 	_log_label.text = "\n".join(lines)
 
 
 func _passes_filter(entry: Dictionary) -> bool:
-	# 対象キャラ抜粋
 	if _filter_target != "" and not entry["text"].contains(_filter_target):
 		return false
-	# 陣営フィルタ
 	if not _show_faction.get(entry["faction"], true):
 		return false
-	# 種類フィルタ（warn は「システム」に含めて扱う）
 	var key: String = entry["category"]
 	if key == "warn":
 		key = "system"
@@ -173,8 +254,38 @@ func _passes_filter(entry: Dictionary) -> bool:
 	return true
 
 
+# ログ＋参加ユニット設定を user://logs/ にテキスト保存（AIに食わせる素材用）
+func _save_log() -> void:
+	var dir: String = "user://logs"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var stamp: String = Time.get_datetime_string_from_system().replace(":", "-").replace("T", "_")
+	var path: String = "%s/battle_%s.txt" % [dir, stamp]
+	var f: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		log_message("ログ保存に失敗しました", "warn", "system")
+		return
+
+	f.store_line("=== 戦闘ログ ===")
+	f.store_line("日時: %s" % Time.get_datetime_string_from_system())
+	f.store_line("")
+	f.store_line("--- 参加ユニット ---")
+	for u in get_tree().get_nodes_in_group("units"):
+		f.store_line("[%s] %s / role=%s / HP%d ATK%d DEF%d HEAL%d / 速度%d 射程%d 間隔%.1f" % [
+			u.team_name(), u.unit_name, u.role,
+			u.max_hp, u.attack_power, u.defense, u.heal_power,
+			int(u.move_speed), int(u.attack_range), u.attack_cooldown,
+		])
+	f.store_line("")
+	f.store_line("--- 戦闘の流れ ---")
+	for e in _log_entries:
+		f.store_line(e["text"])
+
+	var full: String = ProjectSettings.globalize_path(path)
+	log_message("ログを保存: %s" % full, "system", "system")
+
+
 # ============================================================
-# 音（外部ファイル不要。短いビープをコードで合成）
+# 音
 # ============================================================
 func _setup_audio() -> void:
 	_beep_player = AudioStreamPlayer.new()
@@ -186,10 +297,10 @@ func _make_beep(freq: float, secs: float, volume: float) -> AudioStreamWAV:
 	var rate: int = 22050
 	var count: int = int(rate * secs)
 	var data: PackedByteArray = PackedByteArray()
-	data.resize(count * 2)  # 16bit モノラル
+	data.resize(count * 2)
 	for i in count:
 		var t: float = float(i) / float(rate)
-		var env: float = 1.0 - (float(i) / float(count))  # だんだん小さく
+		var env: float = 1.0 - (float(i) / float(count))
 		var s: float = sin(TAU * freq * t) * volume * env
 		var v: int = int(clamp(s, -1.0, 1.0) * 32767.0)
 		data.encode_s16(i * 2, v)
@@ -202,7 +313,7 @@ func _make_beep(freq: float, secs: float, volume: float) -> AudioStreamWAV:
 
 
 # ============================================================
-# ユニット生成
+# ユニット生成（JSON優先、無ければコード既定）
 # ============================================================
 func _spawn_units() -> void:
 	_units_node = Node2D.new()
@@ -211,68 +322,29 @@ func _spawn_units() -> void:
 
 	var view: Vector2 = get_viewport_rect().size
 
-	# --- 味方4体（丸） ---
-	var allies: Array = [
-		{
-			"name": "タロウ(前衛)", "role": "Frontline",
-			"max_hp": 160, "attack": 14, "move_speed": 70.0,
-			"attack_range": 48.0, "attack_cooldown": 0.9,
-			"radius": 18.0, "color": Color(0.30, 0.55, 1.00),
-		},
-		{
-			"name": "レン(射撃)", "role": "Shooter",
-			"max_hp": 90, "attack": 18, "move_speed": 65.0,
-			"attack_range": 230.0, "attack_cooldown": 1.1,
-			"radius": 15.0, "color": Color(0.30, 0.85, 0.90),
-		},
-		{
-			"name": "ミナ(衛生)", "role": "Medic",
-			"max_hp": 110, "attack": 8, "heal_power": 16, "move_speed": 75.0,
-			"attack_range": 90.0, "attack_cooldown": 1.3,
-			"radius": 15.0, "color": Color(0.30, 0.90, 0.50),
-		},
-		{
-			"name": "アキラ(支援)", "role": "Support",
-			"max_hp": 110, "attack": 12, "move_speed": 70.0,
-			"attack_range": 150.0, "attack_cooldown": 1.0,
-			"radius": 15.0, "color": Color(0.95, 0.85, 0.30),
-		},
-	]
-
-	# --- 敵3体（四角） ---
-	var enemies: Array = [
-		{
-			"name": "Raider", "role": "Raider",
-			"max_hp": 120, "attack": 12, "move_speed": 70.0,
-			"attack_range": 48.0, "attack_cooldown": 1.0,
-			"radius": 16.0, "color": Color(0.90, 0.35, 0.30),
-		},
-		{
-			"name": "EnemyShooter", "role": "Shooter",
-			"max_hp": 80, "attack": 16, "move_speed": 60.0,
-			"attack_range": 210.0, "attack_cooldown": 1.2,
-			"radius": 15.0, "color": Color(0.90, 0.50, 0.30),
-		},
-		{
-			"name": "Brute", "role": "Brute",
-			"max_hp": 220, "attack": 20, "move_speed": 40.0,
-			"attack_range": 50.0, "attack_cooldown": 1.6,
-			"radius": 22.0, "color": Color(0.70, 0.25, 0.35),
-		},
-	]
+	var allies: Array = GameData.get_allies()
+	if allies.is_empty():
+		allies = _fallback_allies()
+	var enemies: Array = GameData.get_enemies()
+	if enemies.is_empty():
+		enemies = _fallback_enemies()
 
 	_place_team(allies, Unit.Team.ALLY, view.x * 0.20, view)
 	_place_team(enemies, Unit.Team.ENEMY, view.x * 0.80, view)
 
 
-# 1チームを縦に並べて配置する
 func _place_team(list: Array, team: int, x: float, view: Vector2) -> void:
 	var n: int = list.size()
 	var top: float = view.y * 0.18
-	var bottom: float = view.y * 0.62  # 画面下のログ欄に重ならない高さ
+	var bottom: float = view.y * 0.62
 	for i in n:
-		var data: Dictionary = list[i]
+		# JSONの辞書を壊さないよう複製してから team / gambits を足す
+		var data: Dictionary = (list[i] as Dictionary).duplicate(true)
 		data["team"] = team
+		if not data.has("gambits"):
+			var gl: Array = GameData.get_gambits(data.get("role", ""))
+			if not gl.is_empty():
+				data["gambits"] = gl
 
 		var u: Unit = Unit.new()
 		u.setup(data)
@@ -287,19 +359,49 @@ func _place_team(list: Array, team: int, x: float, view: Vector2) -> void:
 
 		_units_node.add_child(u)
 
-		# フィルタの「対象キャラ」候補に追加
 		if _target_option:
 			_target_option.add_item(u.unit_name)
 
 
+# JSONが読めない時のための最低限のフォールバック
+func _fallback_allies() -> Array:
+	return [
+		{ "name": "タロウ(前衛)", "role": "Frontline", "max_hp": 160, "attack": 14,
+			"move_speed": 70.0, "attack_range": 48.0, "attack_cooldown": 0.9,
+			"radius": 18.0, "color": Color(0.30, 0.55, 1.00) },
+		{ "name": "レン(射撃)", "role": "Shooter", "max_hp": 90, "attack": 18,
+			"move_speed": 65.0, "attack_range": 230.0, "attack_cooldown": 1.1,
+			"radius": 15.0, "color": Color(0.30, 0.85, 0.90) },
+		{ "name": "ミナ(衛生)", "role": "Medic", "max_hp": 110, "attack": 8, "heal_power": 16,
+			"move_speed": 75.0, "attack_range": 90.0, "attack_cooldown": 1.3,
+			"radius": 15.0, "color": Color(0.30, 0.90, 0.50) },
+		{ "name": "アキラ(支援)", "role": "Support", "max_hp": 110, "attack": 12,
+			"move_speed": 70.0, "attack_range": 150.0, "attack_cooldown": 1.0,
+			"radius": 15.0, "color": Color(0.95, 0.85, 0.30) },
+	]
+
+
+func _fallback_enemies() -> Array:
+	return [
+		{ "name": "Raider", "role": "Raider", "max_hp": 120, "attack": 12,
+			"move_speed": 70.0, "attack_range": 48.0, "attack_cooldown": 1.0,
+			"radius": 16.0, "color": Color(0.90, 0.35, 0.30) },
+		{ "name": "EnemyShooter", "role": "Shooter", "max_hp": 80, "attack": 16,
+			"move_speed": 60.0, "attack_range": 210.0, "attack_cooldown": 1.2,
+			"radius": 15.0, "color": Color(0.90, 0.50, 0.30) },
+		{ "name": "Brute", "role": "Brute", "max_hp": 220, "attack": 20, "defense": 2,
+			"move_speed": 40.0, "attack_range": 50.0, "attack_cooldown": 1.6,
+			"radius": 22.0, "color": Color(0.70, 0.25, 0.35) },
+	]
+
+
 # ============================================================
-# UI（コードで生成）
+# UI
 # ============================================================
 func _build_ui() -> void:
 	var layer: CanvasLayer = CanvasLayer.new()
 	add_child(layer)
 
-	# 戦闘ログの背景（画面下）
 	var log_bg: ColorRect = ColorRect.new()
 	log_bg.color = Color(0.0, 0.0, 0.0, 0.6)
 	log_bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
@@ -308,7 +410,6 @@ func _build_ui() -> void:
 	log_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(log_bg)
 
-	# 戦闘ログ本体（色分けのため BBCode を有効化）
 	_log_label = RichTextLabel.new()
 	_log_label.bbcode_enabled = true
 	_log_label.scroll_following = true
@@ -320,9 +421,8 @@ func _build_ui() -> void:
 	_log_label.add_theme_font_size_override("normal_font_size", 15)
 	layer.add_child(_log_label)
 
-	_build_filter_panel(layer)
+	_build_control_panel(layer)
 
-	# 「PAUSED」表示
 	_pause_label = Label.new()
 	_pause_label.text = "● PAUSED （スペースで再開）"
 	_pause_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -334,7 +434,6 @@ func _build_ui() -> void:
 	_pause_label.visible = false
 	layer.add_child(_pause_label)
 
-	# HP低下アラート表示（一瞬光って消える）
 	_alert_label = Label.new()
 	_alert_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_alert_label.offset_top = 52.0
@@ -345,7 +444,6 @@ func _build_ui() -> void:
 	_alert_label.visible = false
 	layer.add_child(_alert_label)
 
-	# 勝敗の結果表示
 	_result_label = Label.new()
 	_result_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -356,14 +454,14 @@ func _build_ui() -> void:
 	layer.add_child(_result_label)
 
 
-# 右上のログ表示切替パネル
-func _build_filter_panel(layer: CanvasLayer) -> void:
+# 右上の操作パネル（プリセット・フィルタ・アラート・保存）
+func _build_control_panel(layer: CanvasLayer) -> void:
 	var panel: PanelContainer = PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	panel.offset_left = -220.0
+	panel.offset_left = -244.0
 	panel.offset_right = -8.0
 	panel.offset_top = 8.0
-	panel.offset_bottom = 430.0
+	panel.offset_bottom = 600.0
 
 	var sb: StyleBoxFlat = StyleBoxFlat.new()
 	sb.bg_color = Color(0.0, 0.0, 0.0, 0.55)
@@ -374,6 +472,23 @@ func _build_filter_panel(layer: CanvasLayer) -> void:
 	var box: VBoxContainer = VBoxContainer.new()
 	panel.add_child(box)
 
+	# --- プリセット ---
+	box.add_child(_make_header("― 設定プリセット ―"))
+	_preset_option = OptionButton.new()
+	_preset_option.focus_mode = Control.FOCUS_NONE
+	for n in GameData.get_preset_names():
+		_preset_option.add_item(n)
+	_preset_option.item_selected.connect(_on_preset_selected)
+	box.add_child(_preset_option)
+	_select_preset_in_dropdown(GameData.active_preset_name)
+	box.add_child(_make_button("▶ 次のプリセットへ", _cycle_preset))
+
+	_preset_name_edit = LineEdit.new()
+	_preset_name_edit.placeholder_text = "プリセット名"
+	box.add_child(_preset_name_edit)
+	box.add_child(_make_button("現在の設定を保存", _save_current_as_preset))
+
+	# --- ログフィルタ ---
 	box.add_child(_make_header("― ログ表示 ―"))
 	box.add_child(_make_check("味方", true, _on_faction_toggled.bind("ally")))
 	box.add_child(_make_check("敵", true, _on_faction_toggled.bind("enemy")))
@@ -388,16 +503,49 @@ func _build_filter_panel(layer: CanvasLayer) -> void:
 	box.add_child(_make_header("― 対象キャラ ―"))
 	_target_option = OptionButton.new()
 	_target_option.focus_mode = Control.FOCUS_NONE
-	_target_option.add_item("全員")  # index 0
+	_target_option.add_item("全員")
 	_target_option.item_selected.connect(_on_target_selected)
 	box.add_child(_target_option)
 
+	# --- アラート ---
 	box.add_child(_make_header("― アラート ―"))
-	box.add_child(_make_check("HP低下で一時停止", false, _on_autopause_toggled))
-	box.add_child(_make_check("アラーム音", true, _on_alarm_toggled))
+	_chk_autopause = _make_check("HP低下で一時停止", false, _on_autopause_toggled)
+	box.add_child(_chk_autopause)
+	_chk_alarm = _make_check("アラーム音", true, _on_alarm_toggled)
+	box.add_child(_chk_alarm)
+
+	# --- 保存 ---
+	box.add_child(_make_header("― ログ ―"))
+	box.add_child(_make_button("戦闘ログを保存", _save_log))
 
 
-# CheckBox から呼ばれるハンドラ群（bind で陣営/種類のキーを渡す）
+func _make_header(text: String) -> Label:
+	var l: Label = Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", 13)
+	l.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
+	return l
+
+
+func _make_check(text: String, pressed: bool, callback: Callable) -> CheckBox:
+	var c: CheckBox = CheckBox.new()
+	c.text = text
+	c.button_pressed = pressed
+	c.focus_mode = Control.FOCUS_NONE
+	c.add_theme_font_size_override("font_size", 14)
+	c.toggled.connect(callback)
+	return c
+
+
+func _make_button(text: String, callback: Callable) -> Button:
+	var b: Button = Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_size_override("font_size", 14)
+	b.pressed.connect(callback)
+	return b
+
+
 func _on_faction_toggled(pressed: bool, key: String) -> void:
 	_show_faction[key] = pressed
 	_refresh_log()
@@ -414,24 +562,6 @@ func _on_autopause_toggled(pressed: bool) -> void:
 
 func _on_alarm_toggled(pressed: bool) -> void:
 	alarm_on = pressed
-
-
-func _make_header(text: String) -> Label:
-	var l: Label = Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", 13)
-	l.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
-	return l
-
-
-func _make_check(text: String, pressed: bool, callback: Callable) -> CheckBox:
-	var c: CheckBox = CheckBox.new()
-	c.text = text
-	c.button_pressed = pressed
-	c.focus_mode = Control.FOCUS_NONE  # スペースキーを奪わせない
-	c.add_theme_font_size_override("font_size", 14)
-	c.toggled.connect(callback)
-	return c
 
 
 func _on_target_selected(index: int) -> void:

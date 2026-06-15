@@ -1,0 +1,43 @@
+{
+	"_comment": "ゲーム設定。presets に名前付き設定を並べ、active_preset で初期適用するものを指定。ゲーム内のプルダウンで切替・カスタム保存も可能（カスタムは user://user_presets.json に保存）。log_colors は #RRGGBB。",
+	"active_preset": "標準",
+	"presets": {
+		"標準": {
+			"low_hp_threshold": 0.3,
+			"alarm_on": true,
+			"auto_pause_on_alert": false,
+			"max_log_lines": 12,
+			"log_colors": {
+				"attack": "#d9d9d9",
+				"heal": "#66f28c",
+				"retreat": "#f2d959",
+				"death": "#f27373",
+				"warn": "#ff8c26",
+				"system": "#8cccff"
+			}
+		},
+		"アラート厳しめ": {
+			"low_hp_threshold": 0.5,
+			"alarm_on": true,
+			"auto_pause_on_alert": true,
+			"max_log_lines": 12
+		},
+		"静音": {
+			"alarm_on": false,
+			"auto_pause_on_alert": false
+		},
+		"ログ多め": {
+			"max_log_lines": 22
+		},
+		"暗色ログ": {
+			"log_colors": {
+				"attack": "#9aa0a6",
+				"heal": "#2e8b57",
+				"retreat": "#b8860b",
+				"death": "#a83232",
+				"warn": "#cc6600",
+				"system": "#4d7fa6"
+			}
+		}
+	}
+}
