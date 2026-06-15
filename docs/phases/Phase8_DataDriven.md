@@ -55,3 +55,30 @@
 ## 関連
 
 - 将来アイデアの一覧 → [../ideas/USER_IDEAS.md](../ideas/USER_IDEAS.md)
+- 設計の相談事項 → [../ideas/DESIGN_QUESTIONS.md](../ideas/DESIGN_QUESTIONS.md)
+
+---
+
+# v0.8.1 追記 — ログ色分け・ゲーム内CONFIG UI・ログ保存設定
+
+- **日付**: 2026-06-15 / **担当**: Claude
+
+## 追加内容（ユーザー要望）
+
+1. **ログ内のキャラ名を色分け**: ダメージ等が白系の行でも、ユニット名はそのキャラ色で表示（`_name_colors` 登録 → `_colorize_names()` で BBCode の入れ子色）。
+2. **ログ保存をデフォルトOFF＋ON/OFF＋保存先選択**:
+   - `log_save_enabled`（既定 false）。ONのときだけ戦闘終了時に自動保存。
+   - 「今すぐ手動保存」ボタンは常時可。
+   - 「保存先を選ぶ」で `FileDialog`(OPEN_DIR) からフォルダ指定 → `log_save_dir`。
+3. **ゲーム内CONFIG UI**: 右上パネルを `ScrollContainer` 化し、設定をその場で編集:
+   - HP警告%・ログ行数の `HSlider`
+   - HP低下で一時停止 / アラーム音の `CheckBox`
+   - ログ6種の色を `ColorPickerButton` で変更
+   - 編集した設定は「現在の設定を保存」で名前付きプリセット化（user://）。
+   - プリセット切替時はスライダー/チェック/カラーピッカーも `_suppress_ui_signal` ガード付きで追従。
+
+## 保留（→ DESIGN_QUESTIONS.md）
+
+- セミオート指揮（ホールド/索敵攻撃/ムーブアタック）とガンビット切替
+- 信頼度（俺屍）/ ゲージ発動＆バフ（ブルアカ）
+- ステージクリア成長 vs ローグライト

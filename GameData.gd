@@ -24,6 +24,8 @@ const DEFAULT_PRESET: Dictionary = {
 	"alarm_on": true,
 	"auto_pause_on_alert": false,
 	"max_log_lines": 12,
+	"log_save_enabled": false,
+	"log_save_dir": "user://logs",
 	"log_colors": {
 		"attack": "#d9d9d9", "heal": "#66f28c", "retreat": "#f2d959",
 		"death": "#f27373", "warn": "#ff8c26", "system": "#8cccff",
