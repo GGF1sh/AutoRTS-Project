@@ -131,6 +131,12 @@ func _run_action(rule: Dictionary, delta: float) -> void:
 			_act_attack(_find_weakest_enemy(), delta)
 		"retreat":
 			_act_retreat(delta)
+		"retreat_to_safe":
+			_act_retreat_to_safe(rule.get("factor", 1.3), delta)
+		"flee_to_healer":
+			_act_flee_to_healer(rule.get("factor", 1.3), delta)
+		"heal_self":
+			_act_heal_self()
 		"move_to_nearest_enemy":
 			_act_move_to(_find_nearest_enemy(), delta)
 		"heal_lowest_hp_ally":
@@ -172,6 +178,55 @@ func _act_retreat(delta: float) -> void:
 	var dir: Vector2 = (global_position - e.global_position).normalized()
 	global_position += dir * move_speed * delta
 	_clamp_to_battlefield()
+
+
+# 安全距離まで下がったら止まる「際限のある後退」。
+# safe = 生存している敵の最大射程 × factor（近接だけなら近め、遠距離が居れば遠くまで）
+func _act_retreat_to_safe(factor: float, delta: float) -> void:
+	var e: Unit = _find_nearest_enemy()
+	if e == null:
+		_set_action("待機")
+		return
+	# 最寄りの脅威の射程 × factor まで下がる。最低 150px は確保（トリガー距離より広く）。
+	var safe: float = max(150.0, e.attack_range * factor)
+	var d: float = global_position.distance_to(e.global_position)
+	if d >= safe:
+		_set_action("待機(警戒)")  # 十分離れた → その場で警戒
+	else:
+		_set_action("後退")
+		var dir: Vector2 = (global_position - e.global_position).normalized()
+		global_position += dir * move_speed * delta
+		_clamp_to_battlefield()
+
+
+# 衛生兵のところへ後退する（衛生兵が居なければ安全距離後退にフォールバック）
+func _act_flee_to_healer(factor: float, delta: float) -> void:
+	var medic: Unit = _find_nearest_healer()
+	if medic == null:
+		_act_retreat_to_safe(factor, delta)
+		return
+	var d: float = global_position.distance_to(medic.global_position)
+	if d > 48.0:
+		_set_action("後退")
+		var dir: Vector2 = (medic.global_position - global_position).normalized()
+		global_position += dir * move_speed * delta
+		_clamp_to_battlefield()
+	else:
+		_set_action("待機(警戒)")  # 衛生兵のそばで回復を待つ
+
+
+# 自己回復（衛生兵が自分を治す）
+func _act_heal_self() -> void:
+	if hp >= max_hp:
+		_set_action("待機")
+		return
+	_set_action("自己回復")
+	if _cooldown_timer <= 0.0:
+		_cooldown_timer = attack_cooldown
+		if battle:
+			battle.add_heal_fx(global_position, base_color)
+			battle.play_heal_sfx()
+		receive_heal(heal_power, self)
 
 
 func _act_heal(threshold: float, delta: float) -> void:
@@ -238,6 +293,29 @@ func _find_weakest_enemy() -> Unit:
 	return weakest
 
 
+# 生存している敵の最大攻撃射程（後退の安全距離計算に使う）
+func _max_enemy_range() -> float:
+	var m: float = 0.0
+	for u in _units_in(_enemy_group()):
+		if u.is_alive() and u.attack_range > m:
+			m = u.attack_range
+	return m
+
+
+# 最も近い「生きている味方の衛生兵（heal_power>0）」。自分は除く。
+func _find_nearest_healer() -> Unit:
+	var nearest: Unit = null
+	var best: float = INF
+	for u in _units_in(_ally_group()):
+		if u == self or not u.is_alive() or u.heal_power <= 0:
+			continue
+		var d: float = global_position.distance_to(u.global_position)
+		if d < best:
+			best = d
+			nearest = u
+	return nearest
+
+
 # HP割合が threshold 未満で最も弱った味方（自分以外）。Medic の回復対象用。
 func _find_wounded_ally(threshold: float) -> Unit:
 	var target: Unit = null
@@ -266,7 +344,8 @@ func _try_attack(target: Unit) -> void:
 	_cooldown_timer = attack_cooldown
 	var damage: int = max(1, attack_power - target.defense)
 	if battle:
-		battle.add_attack_fx(global_position, target.global_position, base_color)
+		var kind: String = "slash" if attack_range <= 90.0 else "beam"
+		battle.add_attack_fx(global_position, target.global_position, base_color, kind)
 		battle.play_attack_sfx()
 	target.take_damage(damage, self)
 
@@ -341,6 +420,12 @@ func _set_action(label: String) -> void:
 		"後退":
 			battle.log_message("← %s は危険を察知して後退する" % unit_name,
 				"retreat", team_name())
+		"待機(警戒)":
+			battle.log_message("%s は安全圏まで下がり警戒している" % unit_name,
+				"retreat", team_name())
+		"自己回復":
+			battle.log_message("%s は自分を治療する" % unit_name,
+				"heal", team_name())
 		"回復", "接近(回復)":
 			battle.log_message("%s は負傷した味方を助けに向かう" % unit_name,
 				"heal", team_name())
@@ -351,27 +436,34 @@ func _set_action(label: String) -> void:
 # ============================================================
 func _default_gambits(r: String) -> Array:
 	match r:
-		"Shooter":  # 近づかれたら後退して距離を取る（カイト）
+		"Shooter":  # 近づかれたらカイト。瀕死なら衛生兵へ
 			return [
-				{ "cond": "self_hp_below", "param": 0.3, "action": "retreat" },
-				{ "cond": "enemy_too_close", "param": 120.0, "action": "retreat" },
+				{ "cond": "self_hp_below", "param": 0.3, "action": "flee_to_healer", "factor": 1.3 },
+				{ "cond": "enemy_too_close", "param": 130.0, "action": "retreat_to_safe", "factor": 1.2 },
 				{ "cond": "enemy_in_range", "action": "attack_nearest" },
 				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
 			]
-		"Medic":  # 味方を回復。自分が危なければ逃げる
+		"Medic":  # 危険なら安全圏へ→自己回復→味方回復→復帰
 			return [
-				{ "cond": "self_hp_below", "param": 0.25, "action": "retreat" },
+				{ "cond": "enemy_too_close", "param": 110.0, "action": "retreat_to_safe", "factor": 1.3 },
+				{ "cond": "self_hp_below", "param": 0.6, "action": "heal_self" },
 				{ "cond": "ally_hp_below", "param": 0.7, "action": "heal_lowest_hp_ally" },
 				{ "cond": "enemy_in_range", "action": "attack_nearest" },
 				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
 			]
-		"Support":  # 弱った敵を集中攻撃。危なければ後退
+		"Support":  # 弱った敵を集中攻撃。瀕死なら衛生兵へ
 			return [
-				{ "cond": "self_hp_below", "param": 0.3, "action": "retreat" },
+				{ "cond": "self_hp_below", "param": 0.3, "action": "flee_to_healer" },
 				{ "cond": "enemy_in_range", "action": "attack_weakest" },
 				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
 			]
-		_:  # Frontline / Raider / Brute など：接近して殴る
+		"Scout":  # 高速・弱点狙い。瀕死なら安全圏へ
+			return [
+				{ "cond": "self_hp_below", "param": 0.3, "action": "retreat_to_safe" },
+				{ "cond": "enemy_in_range", "action": "attack_weakest" },
+				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
+			]
+		_:  # Frontline / Raider / Brute：盾役。退かずHP0まで戦う
 			return [
 				{ "cond": "enemy_in_range", "action": "attack_nearest" },
 				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },

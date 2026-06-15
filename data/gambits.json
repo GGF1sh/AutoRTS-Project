@@ -1,31 +1,33 @@
 {
-	"_comment": "ロールごとのガンビット（条件→行動を上から評価し、最初に成立したものを実行）。cond/action は Unit.gd が対応しているキーのみ有効。param は割合(0.0-1.0)や距離(px)。",
+	"_comment": "ロールごとのガンビット（条件→行動を上から評価し、最初に成立したものを実行）。cond/action は Unit.gd が対応しているキーのみ有効。param=条件のしきい値（割合0-1や距離px）。factor=後退系の安全距離倍率（敵の最大射程×factor まで下がる）。",
 	"_conditions": [
 		"self_hp_below(param=割合)", "ally_hp_below(param=割合)",
 		"enemy_in_range", "enemy_too_close(param=距離)", "nearest_enemy_exists"
 	],
 	"_actions": [
-		"attack_nearest", "attack_weakest", "retreat",
-		"move_to_nearest_enemy", "heal_lowest_hp_ally"
+		"attack_nearest", "attack_weakest", "move_to_nearest_enemy",
+		"heal_lowest_hp_ally", "heal_self",
+		"retreat(際限なし)", "retreat_to_safe(factor=倍率)", "flee_to_healer(factor=倍率)"
 	],
 	"Frontline": [
 		{ "cond": "enemy_in_range", "action": "attack_nearest" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],
 	"Shooter": [
-		{ "cond": "self_hp_below", "param": 0.3, "action": "retreat" },
-		{ "cond": "enemy_too_close", "param": 120.0, "action": "retreat" },
+		{ "cond": "self_hp_below", "param": 0.3, "action": "flee_to_healer", "factor": 1.3 },
+		{ "cond": "enemy_too_close", "param": 130.0, "action": "retreat_to_safe", "factor": 1.2 },
 		{ "cond": "enemy_in_range", "action": "attack_nearest" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],
 	"Medic": [
-		{ "cond": "self_hp_below", "param": 0.25, "action": "retreat" },
+		{ "cond": "enemy_too_close", "param": 110.0, "action": "retreat_to_safe", "factor": 1.3 },
+		{ "cond": "self_hp_below", "param": 0.6, "action": "heal_self" },
 		{ "cond": "ally_hp_below", "param": 0.7, "action": "heal_lowest_hp_ally" },
 		{ "cond": "enemy_in_range", "action": "attack_nearest" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],
 	"Support": [
-		{ "cond": "self_hp_below", "param": 0.3, "action": "retreat" },
+		{ "cond": "self_hp_below", "param": 0.3, "action": "flee_to_healer", "factor": 1.3 },
 		{ "cond": "enemy_in_range", "action": "attack_weakest" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],
@@ -34,7 +36,7 @@
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],
 	"Scout": [
-		{ "cond": "self_hp_below", "param": 0.25, "action": "retreat" },
+		{ "cond": "self_hp_below", "param": 0.3, "action": "retreat_to_safe", "factor": 1.2 },
 		{ "cond": "enemy_in_range", "action": "attack_weakest" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],

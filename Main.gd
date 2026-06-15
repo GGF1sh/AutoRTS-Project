@@ -162,25 +162,50 @@ func _draw() -> void:
 	draw_rect(battle_rect, Color(0.35, 0.40, 0.50), false, 2.0)
 	for fx in _effects:
 		var a: float = clamp(fx["t"] / fx["life"], 0.0, 1.0)
-		if fx["type"] == "line":
-			var c: Color = fx["color"]
-			c.a = a
-			draw_line(fx["from"], fx["to"], c, 2.0)
-			draw_circle(fx["to"], 3.0 + 4.0 * a, c)
-		elif fx["type"] == "heal":
-			var hc: Color = Color(0.40, 1.0, 0.55, a)
-			var r: float = 10.0 + (1.0 - a) * 16.0
-			draw_arc(fx["from"], r, 0.0, TAU, 24, hc, 2.0)
+		match fx["type"]:
+			"line":  # 遠距離：ビーム＋着弾
+				var c: Color = fx["color"]
+				c.a = a
+				draw_line(fx["from"], fx["to"], c, 2.0)
+				draw_circle(fx["to"], 3.0 + 4.0 * a, c)
+			"slash":  # 近距離：斜めに走るスラッシュ
+				_draw_slash(fx["to"], a)
+			"heal":  # 回復：うにょうにょと立ち上る線
+				_draw_heal_squiggle(fx["from"], a)
+
+
+# 対象付近を斜めに横切る斬撃。残り時間で位置が動いて「斬った」感を出す。
+func _draw_slash(center: Vector2, a: float) -> void:
+	var p: float = 1.0 - a  # 0→1 で進む
+	var axis: Vector2 = Vector2(0.7071, -0.7071)  # 右上方向
+	var perp: Vector2 = Vector2(axis.y, -axis.x)
+	var c: Vector2 = center + axis * lerp(-18.0, 18.0, p)
+	var half: float = 16.0
+	var col: Color = Color(1.0, 1.0, 1.0, a)
+	draw_line(c - perp * half, c + perp * half, col, 3.0)
+
+
+# 回復：対象から上へ伸びる波線（うにょうにょ）
+func _draw_heal_squiggle(base: Vector2, a: float) -> void:
+	var phase: float = (1.0 - a) * 6.0
+	var pts: PackedVector2Array = PackedVector2Array()
+	for k in 13:
+		var yy: float = base.y - float(k) * 4.0
+		var xx: float = base.x + sin(float(k) * 0.9 + phase) * 7.0
+		pts.append(Vector2(xx, yy))
+	if pts.size() >= 2:
+		draw_polyline(pts, Color(0.40, 1.0, 0.55, a), 2.0)
 
 
 # Unit から呼ばれるエフェクト登録
-func add_attack_fx(from: Vector2, to: Vector2, color: Color) -> void:
-	_effects.append({ "type": "line", "from": from, "to": to, "color": color, "t": 0.18, "life": 0.18 })
+func add_attack_fx(from: Vector2, to: Vector2, color: Color, kind: String = "beam") -> void:
+	var ty: String = "slash" if kind == "slash" else "line"
+	_effects.append({ "type": ty, "from": from, "to": to, "color": color, "t": 0.18, "life": 0.18 })
 	queue_redraw()
 
 
 func add_heal_fx(pos: Vector2, _color: Color) -> void:
-	_effects.append({ "type": "heal", "from": pos, "to": pos, "color": Color.GREEN, "t": 0.35, "life": 0.35 })
+	_effects.append({ "type": "heal", "from": pos, "to": pos, "color": Color.GREEN, "t": 0.45, "life": 0.45 })
 	queue_redraw()
 
 
