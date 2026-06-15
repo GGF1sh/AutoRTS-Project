@@ -37,6 +37,8 @@ var _cooldown_timer: float = 0.0  # 0 以下なら攻撃／回復可能
 var _dead: bool = false
 var _last_action: String = ""     # 直前の行動ラベル（ログの重複防止）
 var _low_hp_warned: bool = false  # HP低下アラートを既に出したか
+var _narration_cd: float = 0.0    # 行動ナレーションlog のクールダウン（連投防止）
+const NARRATION_INTERVAL: float = 3.0
 var battle: Node = null           # Main への参照（ログ出力・一時停止判定に使う）
 
 
@@ -89,6 +91,8 @@ func _process(delta: float) -> void:
 
 	if _cooldown_timer > 0.0:
 		_cooldown_timer -= delta
+	if _narration_cd > 0.0:
+		_narration_cd -= delta
 
 	_run_gambits(delta)
 
@@ -409,26 +413,31 @@ func _clamp_to_battlefield() -> void:
 	global_position.y = clamp(global_position.y, r.position.y + m, r.position.y + r.size.y - m)
 
 
-# 行動が変わった時だけ、目立つ判断をログに出す
+# 行動が変わった時だけ、目立つ判断をログに出す。
+# ただし毎フレームの状態フリップでログが溢れないよう、ユニットごとに
+# クールダウン（NARRATION_INTERVAL秒）を設けて間引く。
 func _set_action(label: String) -> void:
 	if label == _last_action:
 		return
 	_last_action = label
-	if battle == null:
-		return
+	if battle == null or _narration_cd > 0.0:
+		return  # 直近に喋ったばかり → 行動は継続するがログは出さない
+
+	var msg: String = ""
+	var cat: String = "retreat"
 	match label:
 		"後退":
-			battle.log_message("← %s は危険を察知して後退する" % unit_name,
-				"retreat", team_name())
-		"待機(警戒)":
-			battle.log_message("%s は安全圏まで下がり警戒している" % unit_name,
-				"retreat", team_name())
+			msg = "← %s は危険を察知して後退する" % unit_name
+			cat = "retreat"
 		"自己回復":
-			battle.log_message("%s は自分を治療する" % unit_name,
-				"heal", team_name())
+			msg = "%s は自分を治療する" % unit_name
+			cat = "heal"
 		"回復", "接近(回復)":
-			battle.log_message("%s は負傷した味方を助けに向かう" % unit_name,
-				"heal", team_name())
+			msg = "%s は負傷した味方を助けに向かう" % unit_name
+			cat = "heal"
+	if msg != "":
+		battle.log_message(msg, cat, team_name())
+		_narration_cd = NARRATION_INTERVAL
 
 
 # ============================================================
