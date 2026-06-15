@@ -106,8 +106,8 @@ func _spawn_units() -> void:
 		},
 		{
 			"name": "ミナ(衛生)", "role": "Medic",
-			"max_hp": 110, "attack": 8, "move_speed": 75.0,
-			"attack_range": 60.0, "attack_cooldown": 1.3,
+			"max_hp": 110, "attack": 8, "heal_power": 16, "move_speed": 75.0,
+			"attack_range": 90.0, "attack_cooldown": 1.3,
 			"radius": 15.0, "color": Color(0.30, 0.90, 0.50),
 		},
 		{
