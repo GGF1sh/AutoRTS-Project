@@ -100,12 +100,47 @@ func _merge_preset(p: Variant) -> Dictionary:
 
 func get_allies() -> Array:
 	var a: Variant = units.get("allies", [])
-	return a if a is Array else []
+	if a is Array and not a.is_empty():
+		return a
+	return _builtin_allies()
 
 
 func get_enemies() -> Array:
 	var e: Variant = units.get("enemies", [])
-	return e if e is Array else []
+	if e is Array and not e.is_empty():
+		return e
+	return _builtin_enemies()
+
+
+# data/units.json が読めない時のための内蔵フォールバック（色は #RRGGBB）
+func _builtin_allies() -> Array:
+	return [
+		{ "name": "タロウ(前衛)", "role": "Frontline", "max_hp": 170, "attack": 14, "defense": 2,
+			"move_speed": 72.0, "attack_range": 48.0, "attack_cooldown": 0.9, "radius": 18.0, "color": "#4d8cff" },
+		{ "name": "ゴウ(重装)", "role": "Frontline", "max_hp": 240, "attack": 10, "defense": 5,
+			"move_speed": 52.0, "attack_range": 50.0, "attack_cooldown": 1.4, "radius": 21.0, "color": "#3f6fd1" },
+		{ "name": "レン(射撃)", "role": "Shooter", "max_hp": 90, "attack": 18,
+			"move_speed": 66.0, "attack_range": 240.0, "attack_cooldown": 1.0, "radius": 15.0, "color": "#4dd9e6" },
+		{ "name": "ミナ(衛生)", "role": "Medic", "max_hp": 110, "attack": 8, "heal_power": 18,
+			"move_speed": 78.0, "attack_range": 95.0, "attack_cooldown": 1.2, "radius": 15.0, "color": "#4de680" },
+		{ "name": "アキラ(支援)", "role": "Support", "max_hp": 110, "attack": 13,
+			"move_speed": 72.0, "attack_range": 160.0, "attack_cooldown": 1.0, "radius": 15.0, "color": "#f2d94d" },
+	]
+
+
+func _builtin_enemies() -> Array:
+	return [
+		{ "name": "レイダー", "role": "Raider", "max_hp": 120, "attack": 12,
+			"move_speed": 72.0, "attack_range": 48.0, "attack_cooldown": 1.0, "radius": 16.0, "color": "#e65a4d" },
+		{ "name": "スカウト", "role": "Scout", "max_hp": 70, "attack": 10,
+			"move_speed": 110.0, "attack_range": 46.0, "attack_cooldown": 0.7, "radius": 13.0, "color": "#e6a24d" },
+		{ "name": "スナイパー", "role": "Shooter", "max_hp": 75, "attack": 22,
+			"move_speed": 58.0, "attack_range": 260.0, "attack_cooldown": 1.6, "radius": 15.0, "color": "#e6804d" },
+		{ "name": "敵衛生兵", "role": "Medic", "max_hp": 95, "attack": 7, "heal_power": 15,
+			"move_speed": 74.0, "attack_range": 90.0, "attack_cooldown": 1.3, "radius": 14.0, "color": "#d46a8c" },
+		{ "name": "ブルート", "role": "Brute", "max_hp": 240, "attack": 20, "defense": 3,
+			"move_speed": 40.0, "attack_range": 52.0, "attack_cooldown": 1.6, "radius": 22.0, "color": "#b34059" },
+	]
 
 
 func get_gambits(role: String) -> Array:
