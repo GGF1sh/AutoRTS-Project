@@ -23,6 +23,7 @@
 | 2026-06-15 | v0.9.2 | **Main.gd 分割リファクタ**（ユーザー指摘：肥大化＝トークン浪費）。Hud.gd（UI＋ログ）/ Fx.gd（エフェクト）/ AudioBank.gd（音）へ分離。フォールバックのユニット生データを Main→GameData へ移動。Main は司令塔のみ。Unit の `battle.*` インターフェースは不変＝挙動不変。 | 実装完了。実機確認待ち。 |
 | 2026-06-15 | v0.9.3 | **行動ナレーションlogの連投修正**（ユーザー報告：1戦闘でログ17KB）。毎フレームの状態フリップ（後退↔接近↔回復）で narration が溢れていた。Unit に `_narration_cd`（3秒）を入れ間引き。「待機(警戒)」のlogは廃止。ダメージ/回復/撃破/警告の実イベントは据え置き。 | 実装完了。実機確認待ち。 |
 | 2026-06-15 | v0.9.4 | **focus_fire＋再戦＋フォルダ整理**（3AIレビュー反映＋ユーザー要望）。Main に集中ターゲット（report_attack/get_focus_target）、Unit に focus_fire 行動（Shooter/Support が味方の狙う敵を集中）。R=reload_current_scene で再戦。scripts//scenes/ へ整理、node_2d.tscn削除、パス参照更新。docs/NEXT_TASKS.md に引き継ぎ集約。 | 実装完了。実機確認待ち。ここで新チャットへ切替予定。 |
+| 2026-06-16 | v0.9.5 | **protect_ally（盾役の連携）**（NEXT_TASKS 最優先）。新条件 `backline_threatened(param)`＝後衛（Shooter/Support/Medic・heal_power>0）にparam以内へ敵接近、新行動 `protect_ally`＝最も脅威の近い後衛と敵の間へ割り込み、射程内なら迎撃→守る相手が無ければ通常攻撃にフォールバック。Frontline既定に最優先で付与し Raider/Brute と分離。Unit.gd と gambits.json 双方更新。 | 実装完了。実機確認待ち。 |
 
 ## 実装スタンス（合意済み）
 

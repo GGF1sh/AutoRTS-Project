@@ -2,14 +2,17 @@
 	"_comment": "ロールごとのガンビット（条件→行動を上から評価し、最初に成立したものを実行）。cond/action は Unit.gd が対応しているキーのみ有効。param=条件のしきい値（割合0-1や距離px）。factor=後退系の安全距離倍率（敵の最大射程×factor まで下がる）。",
 	"_conditions": [
 		"self_hp_below(param=割合)", "ally_hp_below(param=割合)",
+		"backline_threatened(param=距離: 後衛の味方に敵がparam以内に接近)",
 		"enemy_in_range", "enemy_too_close(param=距離)", "nearest_enemy_exists"
 	],
 	"_actions": [
 		"attack_nearest", "attack_weakest", "focus_fire(味方の集中ターゲットを狙う)",
+		"protect_ally(param=距離: 狙われた後衛と敵の間へ割り込み、射程内なら迎撃)",
 		"move_to_nearest_enemy", "heal_lowest_hp_ally", "heal_self",
 		"retreat(際限なし)", "retreat_to_safe(factor=倍率)", "flee_to_healer(factor=倍率)"
 	],
 	"Frontline": [
+		{ "cond": "backline_threatened", "param": 150.0, "action": "protect_ally" },
 		{ "cond": "enemy_in_range", "action": "attack_nearest" },
 		{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" }
 	],

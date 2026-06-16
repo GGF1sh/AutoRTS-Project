@@ -115,6 +115,8 @@ func _check_condition(rule: Dictionary) -> bool:
 			return float(hp) / float(max_hp) < param
 		"ally_hp_below":
 			return _find_wounded_ally(param) != null
+		"backline_threatened":
+			return _find_threatened_backline(param) != null
 		"enemy_in_range":
 			var e: Unit = _find_nearest_enemy()
 			return e != null and global_position.distance_to(e.global_position) <= attack_range
@@ -135,6 +137,8 @@ func _run_action(rule: Dictionary, delta: float) -> void:
 			_act_attack(_find_weakest_enemy(), delta)
 		"focus_fire":
 			_act_attack(_focus_or_nearest(), delta)
+		"protect_ally":
+			_act_protect_ally(rule.get("param", 150.0), delta)
 		"retreat":
 			_act_retreat(delta)
 		"retreat_to_safe":
@@ -174,6 +178,32 @@ func _focus_or_nearest() -> Unit:
 		if f != null:
 			return f
 	return _find_nearest_enemy()
+
+
+# 脅威にさらされた後衛の味方と敵の「間」へ回り込んで守る。
+# 守る相手が居なければ通常攻撃にフォールバック。脅威が射程内なら迎撃する。
+func _act_protect_ally(param: float, delta: float) -> void:
+	var ally: Unit = _find_threatened_backline(param)
+	if ally == null:
+		_act_attack(_find_nearest_enemy(), delta)
+		return
+	var threat: Unit = _nearest_enemy_to(ally.global_position)
+	if threat == null:
+		_act_attack(_find_nearest_enemy(), delta)
+		return
+	# 脅威が自分の射程内に居れば迎撃（盾として殴り返す）
+	if global_position.distance_to(threat.global_position) <= attack_range:
+		_set_action("護衛(迎撃)")
+		_try_attack(threat)
+		return
+	# 守る味方の「敵側」に立ち、間に割り込む
+	var dir: Vector2 = (threat.global_position - ally.global_position).normalized()
+	var guard_pos: Vector2 = ally.global_position + dir * (radius * 2.0 + 16.0)
+	_set_action("護衛")
+	var mv: Vector2 = guard_pos - global_position
+	if mv.length() > 2.0:
+		global_position += mv.normalized() * move_speed * delta
+	_clamp_to_battlefield()
 
 
 func _act_move_to(target: Unit, delta: float) -> void:
@@ -345,6 +375,43 @@ func _find_wounded_ally(threshold: float) -> Unit:
 	return target
 
 
+# 指定座標に最も近い「生きている敵」
+func _nearest_enemy_to(pos: Vector2) -> Unit:
+	var nearest: Unit = null
+	var best: float = INF
+	for u in _units_in(_enemy_group()):
+		if not u.is_alive():
+			continue
+		var d: float = pos.distance_to(u.global_position)
+		if d < best:
+			best = d
+			nearest = u
+	return nearest
+
+
+# 後衛ロール判定（射撃・支援・衛生兵、または回復役）
+func _is_backline(u: Unit) -> bool:
+	return u.heal_power > 0 or u.role == "Shooter" or u.role == "Support" or u.role == "Medic"
+
+
+# 敵が param px 以内に迫っている後衛の味方のうち、最も脅威が近い1体（自分以外）。
+# protect_ally の対象。守る必要が無ければ null。
+func _find_threatened_backline(param: float) -> Unit:
+	var best: Unit = null
+	var best_threat: float = param
+	for u in _units_in(_ally_group()):
+		if u == self or not u.is_alive() or not _is_backline(u):
+			continue
+		var e: Unit = _nearest_enemy_to(u.global_position)
+		if e == null:
+			continue
+		var d: float = u.global_position.distance_to(e.global_position)
+		if d < best_threat:
+			best_threat = d
+			best = u
+	return best
+
+
 # ============================================================
 # 移動・攻撃・回復・被弾
 # ============================================================
@@ -447,6 +514,9 @@ func _set_action(label: String) -> void:
 		"回復", "接近(回復)":
 			msg = "%s は負傷した味方を助けに向かう" % unit_name
 			cat = "heal"
+		"護衛", "護衛(迎撃)":
+			msg = "%s は仲間を守るため前に出る" % unit_name
+			cat = "retreat"
 	if msg != "":
 		battle.log_message(msg, cat, team_name())
 		_narration_cd = NARRATION_INTERVAL
@@ -484,7 +554,13 @@ func _default_gambits(r: String) -> Array:
 				{ "cond": "enemy_in_range", "action": "attack_weakest" },
 				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
 			]
-		_:  # Frontline / Raider / Brute：盾役。退かずHP0まで戦う
+		"Frontline":  # 盾役。後衛が狙われたら割り込んで守る→いなければ普通に殴る
+			return [
+				{ "cond": "backline_threatened", "param": 150.0, "action": "protect_ally" },
+				{ "cond": "enemy_in_range", "action": "attack_nearest" },
+				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
+			]
+		_:  # Raider / Brute：純アタッカー。退かずHP0まで戦う
 			return [
 				{ "cond": "enemy_in_range", "action": "attack_nearest" },
 				{ "cond": "nearest_enemy_exists", "action": "move_to_nearest_enemy" },
